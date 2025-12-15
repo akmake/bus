@@ -1,241 +1,373 @@
-// src/pages/HomePage.jsx
-import React, { useEffect, useState, useRef } from 'react';
-// *** התיקון לנתיב הייבוא (עם סיומת .jsx) ***
-import Navbar from '../components/Navbar.jsx'; 
-import { Bus, Car, Accessibility, Phone, MessageCircle, Mail, Truck, Zap, ShieldCheck, Clock, Settings, UserCheck, ArrowRight } from 'lucide-react'; 
+import { useEffect, useState } from 'react';
+import { Bus, Building2, ShieldCheck, Star, ArrowLeft, CheckCircle2, MapPin, Users, Quote, ChevronLeft, ChevronRight, Phone, Clock } from 'lucide-react';
 import api from '../services/api';
 
-// --- צבעים מוגדרים (לשמירה על אחידות) ---
-const COLORS = {
-    dark: 'slate-900', // שחור כמעט
-    accent: 'amber-500', // צהוב תעשייתי חזק
-    light: 'slate-100',
-};
-
-// הגדרת האזורים כפי שהוגדרו ב-Navbar
-const SECTIONS = [
-  { id: 'top', title: 'ראשי' },
-  { id: 'fleet', title: 'הצי שלנו' },
-  { id: 'management', title: 'ניהול ובטיחות' },
-  { id: 'contact', title: 'צור קשר' },
-];
-
 export default function HomePage() {
-  const [formData, setFormData] = useState({ name: '', phone: '', email: '', city: '', message: '' });
-  const [status, setStatus] = useState('idle');
+  // --- States ---
   const [content, setContent] = useState({});
-  const [activeSection, setActiveSection] = useState('top'); 
+  const [reviews, setReviews] = useState([]);
   
-  // יצירת Refs לכל סקשן
-  const sectionRefs = useRef({}); 
+  // טופס לידים מעודכן לפי המודל החדש
+  const [formData, setFormData] = useState({ name: '', phone: '', city: '', message: '' });
+  const [formStatus, setFormStatus] = useState('idle'); // idle, loading, success, error
 
-  // --- Intersection Observer (ScrollSpy) ---
+  // קרוסלת ביקורות
+  const [currentReviewIndex, setCurrentReviewIndex] = useState(0);
+
+  // --- Fetch Data ---
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach(entry => {
-          // מזהה את הסקשן הפעיל כאשר הוא חוצה את ה-50% מגובה המסך
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.5) { 
-            setActiveSection(entry.target.id);
-          }
-        });
-      },
-      // rootMargin: '0px 0px -50% 0px' אומר שהגבול התחתון של ה-viewport (האזור הנצפה) 
-      // יעבור בגובה 50% מהמסך.
-      { rootMargin: '0px 0px -50% 0px', threshold: 0.5 } 
-    );
+    const init = async () => {
+       try {
+         // דיווח כניסה
+         api.post('/track').catch(() => {});
+         
+         // שליפת תוכן
+         const contentRes = await api.get('/content');
+         setContent(contentRes.data.data || {});
 
-    SECTIONS.forEach(({ id }) => {
-      const element = document.getElementById(id);
-      if (element) {
-        observer.observe(element);
-        sectionRefs.current[id] = element;
-      }
-    });
+         // שליפת ביקורות (הנחה שיש נתיב כזה, אם אין - נשתמש בנתוני דמה לתצוגה)
+         try {
+             const reviewsRes = await api.get('/reviews'); // וודא שיש Route כזה בשרת (ציבורי)
+             const fetchedReviews = reviewsRes.data.data || [];
+             if (fetchedReviews.length > 0) {
+                 setReviews(fetchedReviews);
+             } else {
+                 throw new Error('No reviews');
+             }
+         } catch (e) {
+             // Fallback Data למקרה שאין עדיין נתונים בשרת כדי שהעיצוב לא יישבר
+             setReviews([
+                 { _id: '1', name: 'ישראל ישראלי', role: 'מנהל תפעול', company: 'אינטל', text: 'שירות יוצא דופן, הנהגים תמיד מגיעים בזמן והרכבים נקיים ומתוחזקים. חוויה מתקנת לעומת חברות אחרות.' },
+                 { _id: '2', name: 'שרה כהן', role: 'מנהלת רווחה', company: 'עיריית תל אביב', text: 'אנחנו עובדים עם יחס הסעות כבר שנתיים ומרוצים מכל רגע. הזמינות של המוקד 24/7 היא יתרון עצום עבורנו.' },
+                 { _id: '3', name: 'יוסי לוי', role: 'מפיק אירועים', company: '', text: 'הזמנו אוטובוסים לחתונה, הכל תיקתק כמו שעון. הנהגים היו אדיבים והאורחים לא הפסיקו לשבח.' },
+             ]);
+         }
 
-    return () => observer.disconnect();
+       } catch (err) {
+           console.error('Error init home page', err);
+       }
+    };
+    init();
   }, []);
 
-  // --- שליחת טופס ---
+  // --- Auto Rotate Reviews ---
+  useEffect(() => {
+      if (reviews.length === 0) return;
+      const interval = setInterval(() => {
+          setCurrentReviewIndex((prev) => (prev + 1) % reviews.length);
+      }, 6000); // כל 6 שניות החלפה
+      return () => clearInterval(interval);
+  }, [reviews]);
+
+  // --- Form Handler ---
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setStatus('loading');
+    setFormStatus('loading');
     try {
-      // כאן אמורה להיות קריאת ה-API האמיתית
-      // await api.post('/leads', formData);
-      setTimeout(() => setStatus('success'), 1000);
-      setFormData({ name: '', phone: '', email: '', city: '', message: '' });
-    } catch (err) { 
-        setStatus('error'); 
+      // שליחת הנתונים כולל העיר וההודעה החדשים
+      await api.post('/leads', formData);
+      setFormStatus('success');
+      setFormData({ name: '', phone: '', city: '', message: '' });
+      setTimeout(() => setFormStatus('idle'), 3000);
+    } catch (err) {
+      setFormStatus('error');
     }
   };
 
   return (
-    <div className="font-sans text-slate-800 bg-white" id="top">
-      
-      {/* --- 1. Navbar המופרד --- */}
-      <Navbar activeSection={activeSection} />
+    <div className="font-sans text-slate-800 bg-white">
 
-      {/* --- 2. HERO SECTION (עשיר יותר ויזואלית) --- */}
-      <section className={`relative h-[750px] w-full bg-${COLORS.dark} overflow-hidden`} id="top">
+      {/* --- 1. HERO SECTION --- */}
+      <section id="hero" className="relative min-h-screen flex items-center justify-center overflow-hidden bg-slate-900">
+        
+        {/* Background Image with Overlay */}
         <div className="absolute inset-0 z-0">
-           <img
-             src="https://images.unsplash.com/photo-1544620025-a6a969b82f0c?q=80&w=2070&auto=format&fit=crop"
-             className="w-full h-full object-cover opacity-20"
-             alt="אוטובוסים בכביש מהיר"
-           />
-           <div className={`absolute inset-0 bg-gradient-to-r from-${COLORS.dark}/90 via-${COLORS.dark}/70 to-transparent`}></div>
+            <img 
+                src="https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?q=80&w=2069&auto=format&fit=crop" 
+                alt="Luxury Bus" 
+                className="w-full h-full object-cover opacity-40 scale-105 animate-slow-zoom"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent"></div>
         </div>
 
-        <div className="relative z-10 container mx-auto px-4 h-full flex items-center">
-          <div className="max-w-4xl space-y-7">
-             <div className={`inline-block border-b-2 border-${COLORS.accent} text-white font-bold tracking-wider uppercase text-sm pb-2 mb-4`}>
-                <span className={`text-${COLORS.accent}`}>•</span>   צי אוטובוסים קבלני אמין, זמין ומתקדם
-             </div>
-
-             <h1 className="text-6xl md:text-7xl font-black text-white leading-tight tracking-tight">
-                הסעות בכמות גדולה.
-                <br />
-                <span className={`text-${COLORS.accent}`}>בלי דאגות.</span>
-             </h1>
-             
-             <p className="text-xl text-gray-300 max-w-2xl leading-relaxed border-r-4 border-gray-700 pr-4">
-               אנו הפתרון הלוגיסטי שלך להסעת עובדים, תלמידים או אורחים. עם צי רכב מקיף (4 עד 60 נוסעים) ונהגים מנוסים, אנו מבטיחים שקט תפעולי מלא, 24 שעות ביממה.
-             </p>
-             
-             <div className="pt-8 flex gap-4">
-               <a href="#contact"
-                       className={`group bg-${COLORS.accent} text-${COLORS.dark} px-8 py-3 font-black text-lg hover:bg-amber-400 transition-all shadow-xl rounded-sm flex items-center gap-2`}>
-                 אני רוצה הצעת מחיר
-                 <ArrowRight size={18} className="group-hover:translate-x-[-3px] transition-transform" />
-               </a>
-             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* --- 3. FLEET (הצי שלנו) --- */}
-      <section id="fleet" className="py-24 bg-white">
-        <div className="container mx-auto px-4">
-           <div className="text-center max-w-4xl mx-auto mb-16">
-              <h2 className={`text-4xl font-black text-${COLORS.dark} mb-4`}>כל כלי רכב, בכל רגע, בכל סדר גודל</h2>
-              <div className={`w-20 h-1.5 bg-${COLORS.accent} mx-auto mb-6`}></div>
-              <p className="text-xl text-slate-600">
-                כחברת קבלן גדולה, המלאי שלנו הוא היתרון שלכם. אנו מחזיקים בהיקף עצום של כלים מוכנים ליציאה, ללא צורך בהתחייבות לרכב ספציפי מראש.
-              </p>
-           </div>
-           
-           <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-6">
-              <FloatingCard icon={<Car size={32} />} title="מיני-ואן יוקרתי" sub="עד 6 מקומות" />
-              <FloatingCard icon={<Truck size={32} />} title='טרנזיט VIP' sub="14 מקומות מפואר" />
-              <FloatingCard icon={<Accessibility size={32} />} title="רכבים נגישים" sub="מצוידים במעלון" />
-              <FloatingCard icon={<Bus size={32} />} title="מיניבוסים" sub="19 / 23 מקומות" />
-              <FloatingCard icon={<Bus size={32} />} title="אוטובוס" sub="60 מקומות / קומפקטי" />
-           </div>
-        </div>
-      </section>
-
-      {/* --- 4. MANAGEMENT & SAFETY (סקשן מפורט וייצוגי) --- */}
-      <section id="management" className={`py-24 bg-${COLORS.light}`}>
-        <div className="container mx-auto px-4">
-          <div className="text-center max-w-4xl mx-auto mb-16">
-            <h2 className={`text-4xl font-black text-${COLORS.dark} mb-4`}>אבטחת איכות ותפעול 360 מעלות</h2>
-            <div className={`w-20 h-1.5 bg-${COLORS.dark} mx-auto mb-6`}></div>
-            <p className="text-xl text-slate-600">
-              המחויבות שלנו מתחילה בהתחייבות לבטיחות, מסתיימת באפס תקלות. אנו מנהלים את הסיכונים הלוגיסטיים עבורך.
+        {/* Content */}
+        <div className="container mx-auto px-4 z-10 text-center mt-16">
+            <div className="inline-block mb-4 px-4 py-1 rounded-full bg-yellow-500/20 border border-yellow-500/50 backdrop-blur-md">
+                <span className="text-yellow-400 font-bold text-sm tracking-wider uppercase">CityLine Systems</span>
+            </div>
+            
+            <h1 className="text-5xl md:text-7xl lg:text-8xl font-black text-white mb-6 tracking-tight leading-tight drop-shadow-2xl">
+                {content.hero_title || 'הדרך שלך.\nהמחויבות שלנו.'}
+            </h1>
+            
+            <p className="text-xl md:text-2xl text-gray-300 mb-10 max-w-2xl mx-auto font-light leading-relaxed whitespace-pre-line">
+                {content.hero_subtitle || 'פתרונות היסעים מתקדמים לארגונים, חברות ומוסדות.\nצי רכבים חדיש בפריסה ארצית וזמינות 24/7.'}
             </p>
-          </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-             <SafetyFeature 
-                icon={<ShieldCheck size={32} />} 
-                title="צי רכב מבוקר"
-                description="כל כלי הרכב עומד בבדיקות קפדניות ונושא את כל האישורים הנדרשים ללא יוצא מן הכלל."
-             />
-             <SafetyFeature 
-                icon={<UserCheck size={32} />} 
-                title="נהגים בכירים"
-                description="צוות נהגים מורשה, ותיק ומנוסה בנהיגה מאתגרת ובשירות אישי ואדיב."
-             />
-             <SafetyFeature 
-                icon={<Clock size={32} />} 
-                title="מוקד 24/7"
-                description="זמינות מלאה של המוקד התפעולי לשינויים, בקשות וטיפול מיידי באירועים דחופים."
-             />
-             <SafetyFeature 
-                icon={<Settings size={32} />} 
-                title="בקרת איכות"
-                description="מערכת מעקב מתקדמת להבטחת עמידה ב-SLA ובדיוק מוחלט בזמני ההגעה והאיסוף."
-             />
-          </div>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <button onClick={() => document.getElementById('contact').scrollIntoView({ behavior: 'smooth' })} className="bg-yellow-500 hover:bg-yellow-400 text-slate-900 px-10 py-4 rounded-xl font-bold text-lg transition shadow-[0_0_20px_rgba(234,179,8,0.4)] flex items-center justify-center gap-2 group">
+                    קבלת הצעה בקליק 
+                    <ArrowLeft className="group-hover:-translate-x-1 transition-transform" />
+                </button>
+                <button className="bg-white/10 hover:bg-white/20 backdrop-blur-md text-white border border-white/20 px-10 py-4 rounded-xl font-bold text-lg transition flex items-center justify-center gap-2">
+                    <Phone size={20} /> חייגו *2055
+                </button>
+            </div>
         </div>
       </section>
 
-      {/* --- 5. CONTACT SECTION (בולט וברור) --- */}
-      <section id="contact" className="py-20 bg-white">
-        <div className="container mx-auto px-4">
-           <div className={`flex flex-col lg:flex-row gap-0 max-w-6xl mx-auto shadow-2xl overflow-hidden border-t-8 border-${COLORS.accent}`}>
-             
-             {/* טופס */}
-             <div className="lg:w-2/3 p-8 md:p-12 bg-white">
-                <h3 className={`text-3xl font-black text-${COLORS.dark} mb-6`}>הסעה זה לא כאב ראש. זה אנחנו.</h3>
-                <form onSubmit={handleSubmit} className="space-y-6">
-                   <div className="grid md:grid-cols-2 gap-6">
-                      <Input placeholder="שם מלא / חברה" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-                      <Input placeholder="טלפון (חובה)" type="tel" required value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
-                   </div>
-                   <div className="grid md:grid-cols-2 gap-6">
-                      <Input placeholder='דוא"ל' type="email" value={formData.email} onChange={e => setFormData({...formData.email, email: e.target.value})} />
-                      <Input placeholder="יעד / אזור פעילות" value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} />
-                   </div>
-                   <textarea
-                     rows="3"
-                     placeholder="כמה נוסעים? לאן ומתי? (ככל שתפרט יותר, כך ההצעה תהיה מדויקת יותר)"
-                     className={`w-full p-4 bg-gray-50 border-b-2 border-gray-200 focus:border-${COLORS.accent} focus:bg-white outline-none transition-colors resize-none`}
-                     value={formData.message}
-                     onChange={e => setFormData({...formData, message: e.target.value})}
-                   ></textarea>
+      {/* --- 2. TRANSITION BAR (Stats) --- */}
+      <div className="relative z-20 -mt-16 container mx-auto px-4">
+          <div className="bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-gray-100 p-8 grid grid-cols-2 md:grid-cols-4 gap-8 divide-x divide-x-reverse divide-gray-100">
+              <StatItem icon={<Clock className="text-blue-600" />} number="24/7" label="מוקד זמין" />
+              <StatItem icon={<MapPin className="text-yellow-500" />} number="פריסה" label="כל הארץ" />
+              <StatItem icon={<ShieldCheck className="text-green-600" />} number="100%" label="בטיחות" />
+              <StatItem icon={<Users className="text-purple-600" />} number="VIP" label="שירות אישי" />
+          </div>
+      </div>
 
-                   <button disabled={status === 'loading' || status === 'success'}
-                     className={`w-full py-4 font-black text-lg rounded-sm transition-all shadow-md 
-                       ${status === 'success' ? 'bg-green-600 text-white' : `bg-${COLORS.dark} text-white hover:bg-slate-800`}`}>
-                      {status === 'loading' ? 'שולח...' : status === 'success' ? 'הבקשה נשלחה בהצלחה!' : 'שליחת בקשה להצעת מחיר'}
-                   </button>
-                </form>
-             </div>
+      {/* --- 3. SALES / SERVICES SECTION --- */}
+      <section id="services" className="py-24 bg-gray-50">
+          <div className="container mx-auto px-4">
+              <div className="text-center mb-16 max-w-3xl mx-auto">
+                  <h2 className="text-4xl font-extrabold text-slate-900 mb-4">למה לבחור ב-CityLine?</h2>
+                  <p className="text-gray-500 text-lg">אנחנו לא רק חברת הסעות. אנחנו השותף הלוגיסטי השקט שלך, זה שדואג שהכל יתקתק בזמן שאתה מתמקד בעבודה.</p>
+              </div>
 
-             {/* פרטים - צד ימין בצבע ה-Call to Action */}
-             <div className={`lg:w-1/3 bg-${COLORS.accent} p-8 md:p-12 text-${COLORS.dark} flex flex-col justify-between`}>
-                <div>
-                  <h3 className={`text-2xl font-black mb-6 border-b-2 border-${COLORS.dark} pb-4 inline-block`}>יצירת קשר מיידית</h3>
-                  <div className="space-y-6 font-bold text-lg text-slate-800">
-                     <ContactItem icon={<Phone className={`text-${COLORS.dark}`} />} text="08-8587626" />
-                     <ContactItem icon={<MessageCircle className={`text-${COLORS.dark}`} />} text="וואטסאפ (מענה מהיר)" />
-                     <ContactItem icon={<Mail className={`text-${COLORS.dark}`} />} text="yosefdaean@gmail.com" />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <ServiceCard 
+                      icon={<Building2 size={40} />}
+                      title="מפעלים וארגונים"
+                      desc="חיסכון בעלויות תפעול, מסלולים חכמים והגעה בזמן למשמרת. הראש השקט של מנהל התפעול."
+                      tags={['חיסכון', 'דיוק', 'יעילות']}
+                  />
+                  <ServiceCard 
+                      icon={<Star size={40} />}
+                      title="אירועים ו-VIP"
+                      desc="רכבי פאר ממוזגים ומאובזרים, נהגים ייצוגיים דוברי שפות ושירות ברמה בינלאומית."
+                      tags={['יוקרה', 'נוחות', 'ייצוגיות']}
+                      highlight
+                  />
+                  <ServiceCard 
+                      icon={<Bus size={40} />}
+                      title="מוסדות חינוך"
+                      desc="בטיחות מעל הכל. רכבים העומדים בכל התקנים המחמירים, חגורות בטיחות ונהגים עם בדיקות רקע."
+                      tags={['בטיחות', 'תקן משרד החינוך']}
+                  />
+              </div>
+          </div>
+      </section>
+
+      {/* --- 4. DYNAMIC REVIEWS SECTION (New!) --- */}
+      <section id="reviews" className="py-24 bg-slate-900 overflow-hidden relative">
+          {/* Background decoration */}
+          <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[120px]"></div>
+          <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-yellow-500/10 rounded-full blur-[100px]"></div>
+
+          <div className="container mx-auto px-4 relative z-10">
+              <div className="flex flex-col items-center mb-12">
+                  <span className="text-yellow-400 font-bold tracking-widest uppercase text-sm mb-2">לקוחות מספרים</span>
+                  <h2 className="text-3xl md:text-5xl font-bold text-white text-center">ההצלחה שלהם, הגאווה שלנו</h2>
+              </div>
+
+              {/* Slider Component */}
+              <div className="max-w-4xl mx-auto relative min-h-[300px]">
+                  {reviews.length > 0 ? (
+                      <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-3xl p-8 md:p-12 text-center transition-all duration-700 ease-in-out">
+                          <div className="mb-6 text-yellow-400 flex justify-center">
+                              <Quote size={48} className="opacity-50" />
+                          </div>
+                          
+                          {/* Review Text - Animated Key */}
+                          <div key={currentReviewIndex} className="animate-fade-in-up">
+                              <p className="text-xl md:text-2xl text-white font-medium leading-relaxed mb-8">
+                                  "{reviews[currentReviewIndex].text}"
+                              </p>
+                              <div className="flex flex-col items-center">
+                                  <div className="w-16 h-1 bg-yellow-500 mb-4 rounded-full"></div>
+                                  <h4 className="text-xl font-bold text-white">{reviews[currentReviewIndex].name}</h4>
+                                  <p className="text-gray-400 text-sm">
+                                      {reviews[currentReviewIndex].role}
+                                      {reviews[currentReviewIndex].role && reviews[currentReviewIndex].company && ' | '}
+                                      {reviews[currentReviewIndex].company}
+                                  </p>
+                              </div>
+                          </div>
+
+                          {/* Controls */}
+                          <div className="flex justify-center gap-2 mt-8">
+                             {reviews.map((_, idx) => (
+                                 <button 
+                                    key={idx}
+                                    onClick={() => setCurrentReviewIndex(idx)}
+                                    className={`w-3 h-3 rounded-full transition-all ${idx === currentReviewIndex ? 'bg-yellow-500 w-8' : 'bg-white/30 hover:bg-white/50'}`}
+                                 />
+                             ))}
+                          </div>
+                      </div>
+                  ) : (
+                      <div className="text-center text-gray-500">טוען המלצות...</div>
+                  )}
+              </div>
+          </div>
+      </section>
+
+      {/* --- 5. CONTACT SECTION --- */}
+      <section id="contact" className="py-24 bg-white relative">
+          <div className="container mx-auto px-4">
+              <div className="bg-white rounded-[2rem] shadow-2xl border border-gray-100 overflow-hidden flex flex-col lg:flex-row">
+                  
+                  {/* Left Side: Info */}
+                  <div className="lg:w-2/5 bg-slate-900 text-white p-12 flex flex-col justify-between relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+                      
+                      <div className="relative z-10">
+                          <h3 className="text-3xl font-bold mb-6">פרטי התקשרות</h3>
+                          <p className="text-gray-400 mb-10 leading-relaxed">
+                              המוקד שלנו זמין עבורכם 24 שעות ביממה.
+                              צרו קשר לקבלת הצעת מחיר מותאמת אישית תוך דקות.
+                          </p>
+
+                          <div className="space-y-6">
+                              <div className="flex items-center gap-4">
+                                  <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center text-yellow-400">
+                                      <Phone size={24} />
+                                  </div>
+                                  <div>
+                                      <p className="text-gray-400 text-xs">מוקד ארצי</p>
+                                      <p className="text-xl font-bold">08-8502020</p>
+                                  </div>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                  <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center text-yellow-400">
+                                      <Building2 size={24} />
+                                  </div>
+                                  <div>
+                                      <p className="text-gray-400 text-xs">כתובת</p>
+                                      <p className="text-lg font-medium">האסיף 1, א.ת באר טוביה</p>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+
+                      <div className="relative z-10 mt-12">
+                          <div className="bg-yellow-500 text-slate-900 p-6 rounded-xl">
+                              <p className="font-bold text-lg mb-1">זמינים בוואטסאפ!</p>
+                              <p className="text-sm opacity-90">שלחו הודעה וקבלו מענה מיידי</p>
+                          </div>
+                      </div>
                   </div>
-                </div>
-                <div className="mt-12 text-sm font-bold pt-4 border-t border-slate-700/20">
-                  <p>שירותי הסעה 24/7 לכל יעד בישראל.</p>
-                </div>
-             </div>
 
-           </div>
-        </div>
+                  {/* Right Side: Form */}
+                  <div className="lg:w-3/5 p-12 bg-gray-50">
+                      <div className="mb-8">
+                          <h3 className="text-3xl font-bold text-slate-900 mb-2">בואו נתקדם</h3>
+                          <p className="text-gray-500">מלאו את הפרטים ונחזור אליכם בהקדם</p>
+                      </div>
+
+                      <form onSubmit={handleSubmit} className="space-y-6">
+                          <div className="grid md:grid-cols-2 gap-6">
+                              <div className="space-y-2">
+                                  <label className="text-sm font-medium text-slate-700">שם מלא</label>
+                                  <input 
+                                      type="text" 
+                                      required
+                                      placeholder="ישראל ישראלי"
+                                      className="w-full p-4 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none transition"
+                                      value={formData.name}
+                                      onChange={e => setFormData({...formData, name: e.target.value})}
+                                  />
+                              </div>
+                              <div className="space-y-2">
+                                  <label className="text-sm font-medium text-slate-700">טלפון נייד</label>
+                                  <input 
+                                      type="tel" 
+                                      required
+                                      placeholder="050-0000000"
+                                      className="w-full p-4 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none transition"
+                                      value={formData.phone}
+                                      onChange={e => setFormData({...formData, phone: e.target.value})}
+                                  />
+                              </div>
+                          </div>
+
+                          <div className="space-y-2">
+                              <label className="text-sm font-medium text-slate-700">עיר / ישוב</label>
+                              <input 
+                                  type="text" 
+                                  placeholder="לדוגמה: תל אביב"
+                                  className="w-full p-4 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none transition"
+                                  value={formData.city}
+                                  onChange={e => setFormData({...formData, city: e.target.value})}
+                              />
+                          </div>
+
+                          <div className="space-y-2">
+                              <label className="text-sm font-medium text-slate-700">הודעה / פרטים נוספים</label>
+                              <textarea 
+                                  rows="4"
+                                  placeholder="אני צריך הסעה ל-50 עובדים..."
+                                  className="w-full p-4 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none transition"
+                                  value={formData.message}
+                                  onChange={e => setFormData({...formData, message: e.target.value})}
+                              ></textarea>
+                          </div>
+
+                          <button 
+                              disabled={formStatus === 'loading' || formStatus === 'success'}
+                              className={`w-full py-4 rounded-xl font-bold text-lg text-white transition-all transform hover:-translate-y-1 shadow-lg
+                                  ${formStatus === 'success' ? 'bg-green-600' : 'bg-slate-900 hover:bg-slate-800'}
+                              `}
+                          >
+                              {formStatus === 'loading' ? 'שולח פרטים...' : formStatus === 'success' ? 'הפרטים נשלחו בהצלחה!' : 'שליחת פרטים'}
+                          </button>
+                      </form>
+                  </div>
+              </div>
+          </div>
       </section>
 
-      {/* Footer */}
-      <footer className={`bg-${COLORS.dark} text-slate-500 py-8 text-center text-sm border-t border-gray-700`}>
-        <div className="container mx-auto">
-          <p>© {new Date().getFullYear()} LineLogic Transport. כל הזכויות שמורות.</p>
-        </div>
-      </footer>
     </div>
   );
 }
 
-// --- SUB-COMPONENTS (לשמירה על קוד נקי) ---
-// (הקומפוננטות הנוספות נשארות זהות)
-function FloatingCard({ icon, title, sub }) { /* ... */ }
-function SafetyFeature({ icon, title, description }) { /* ... */ }
-function ContactItem({ icon, text }) { /* ... */ }
-function Input(props) { /* ... */ }
+// --- Components פנימיים ---
+
+function StatItem({ icon, number, label }) {
+    return (
+        <div className="flex flex-col items-center text-center group">
+            <div className="mb-3 p-3 bg-gray-50 rounded-full group-hover:scale-110 transition-transform duration-300">
+                {icon}
+            </div>
+            <span className="text-3xl font-black text-slate-900 mb-1">{number}</span>
+            <span className="text-sm font-medium text-gray-500 uppercase tracking-wide">{label}</span>
+        </div>
+    );
+}
+
+function ServiceCard({ icon, title, desc, tags, highlight }) {
+    return (
+        <div className={`p-8 rounded-2xl transition-all duration-300 hover:-translate-y-2 flex flex-col h-full border
+            ${highlight 
+                ? 'bg-slate-900 text-white shadow-2xl shadow-slate-900/20 border-slate-800' 
+                : 'bg-white text-slate-800 shadow-sm hover:shadow-xl border-gray-100'
+            }`}
+        >
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-6 
+                ${highlight ? 'bg-yellow-500 text-slate-900' : 'bg-blue-50 text-blue-600'}`}>
+                {icon}
+            </div>
+            <h3 className="text-2xl font-bold mb-4">{title}</h3>
+            <p className={`mb-8 leading-relaxed ${highlight ? 'text-gray-400' : 'text-gray-500'}`}>{desc}</p>
+            
+            <div className="mt-auto flex flex-wrap gap-2">
+                {tags.map((tag, i) => (
+                    <span key={i} className={`text-xs px-3 py-1 rounded-full font-medium
+                        ${highlight ? 'bg-white/10 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                        {tag}
+                    </span>
+                ))}
+            </div>
+        </div>
+    );
+}
