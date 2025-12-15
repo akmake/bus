@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&display=swap');
+
+body {
+  font-family: 'Assistant', sans-serif;
+  direction: rtl;
+  background-color: #ffffff;
+  overflow-x: hidden;
+}
+
+@layer base {
+  :root {
+    /* הצבעים המדויקים שדגמתי מהתמונה שלך */
+    --brand-purple: #563554; 
+    --brand-yellow: #fec007;
+    --brand-dark-purple: #4a2c48;
+  }
+}
+
+/* מחלקות עזר */
+.bg-brand-purple { background-color: var(--brand-purple); }
+.text-brand-purple { color: var(--brand-purple); }
+.bg-brand-yellow { background-color: var(--brand-yellow); }
+.text-brand-yellow { color: var(--brand-yellow); }
+.border-brand-yellow { border-color: var(--brand-yellow); }
+
+.text-outline {
+  -webkit-text-stroke: 1px #ffffff;
+  color: transparent;
+}
