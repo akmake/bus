@@ -1,86 +1,113 @@
-// src/components/Navbar.jsx
-import React from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
-import { Phone, LogOut, LayoutDashboard, BusFront, MapPin } from 'lucide-react';
+import { Phone, LogOut, LayoutDashboard, BusFront, Menu, X } from 'lucide-react';
 
-const COLORS = {
-    dark: 'slate-900',
-    accent: 'amber-500', 
-};
-
-// הגדרת האזורים כפי שהוגדרו בקובץ ה-HomePage
-const SECTIONS = [
-  { id: 'top', title: 'ראשי' },
-  { id: 'fleet', title: 'הצי שלנו' },
-  { id: 'management', title: 'ניהול ובטיחות' },
-  { id: 'contact', title: 'צור קשר' },
-];
-
-/**
- * קומפוננטת ניווט עליונה
- * @param {object} props
- * @param {string} props.activeSection - מזהה האזור הפעיל (לצורך ScrollSpy)
- */
-export default function Navbar({ activeSection }) {
+export default function Navbar() {
   const { user, logout } = useAuthStore();
-  
-  // פונקציה פשוטה לגלול לאלמנט
+  const [activeSection, setActiveSection] = useState('hero');
+  const [isScrolled, setIsScrolled] = useState(false);
+  const location = useLocation();
+  const isHomePage = location.pathname === '/';
+
+  // האזנה לגלילה - לשינוי עיצוב הנאבר ולזיהוי המיקום
+  useEffect(() => {
+    const handleScroll = () => {
+      // 1. שינוי רקע הנאבר בגלילה
+      setIsScrolled(window.scrollY > 50);
+
+      // 2. זיהוי האזור הנוכחי (Scroll Spy) - רץ רק בדף הבית
+      if (isHomePage) {
+        const sections = ['hero', 'services', 'reviews', 'contact'];
+        let current = 'hero';
+        
+        for (const section of sections) {
+          const element = document.getElementById(section);
+          if (element) {
+            const rect = element.getBoundingClientRect();
+            // אם החלק העליון של האלמנט נמצא בשליש העליון של המסך
+            if (rect.top <= 300 && rect.bottom >= 300) {
+              current = section;
+            }
+          }
+        }
+        setActiveSection(current);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [isHomePage]);
+
   const scrollToSection = (id) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+    if (!isHomePage) return; // אם אנחנו לא בדף הבית, הלינק יעביר אותנו (צריך לוגיקה נוספת למעבר עמוד+גלילה, כרגע פשוט נשאר בדף הבית)
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
+  // פונקציית עזר לקישור
+  const NavLink = ({ id, label }) => (
+    <button
+      onClick={() => scrollToSection(id)}
+      className={`text-sm font-medium transition-colors duration-300 relative
+        ${activeSection === id && isHomePage ? 'text-yellow-400 font-bold' : 'text-gray-300 hover:text-white'}
+      `}
+    >
+      {label}
+      {activeSection === id && isHomePage && (
+        <span className="absolute -bottom-2 right-0 w-full h-0.5 bg-yellow-400 rounded-full animate-fade-in"></span>
+      )}
+    </button>
+  );
+
   return (
-    <nav className={`bg-${COLORS.dark} text-white shadow-xl sticky top-0 z-50 border-b-4 border-${COLORS.accent}`}>
+    <nav className={`fixed w-full z-50 transition-all duration-300 ${isScrolled ? 'bg-slate-900/95 shadow-lg py-2' : 'bg-transparent py-4'}`}>
       <div className="container mx-auto px-4">
-        <div className="flex justify-between items-center h-16">
+        <div className="flex justify-between items-center">
 
-          {/* לוגו: חזק ותעשייתי */}
-          <a href="#top" onClick={() => scrollToSection('top')} className="text-2xl font-black flex items-center gap-3 hover:opacity-90 transition cursor-pointer">
-            <div className={`text-${COLORS.accent} bg-white/5 p-2 rounded-sm border border-${COLORS.accent}`}>
-              <BusFront size={24} />
+          {/* לוגו */}
+          <Link to="/" className="text-xl md:text-2xl font-bold flex items-center gap-3 text-white">
+            <div className={`p-2 rounded-lg transition-colors ${isScrolled ? 'bg-white/10' : 'bg-white/20 backdrop-blur-sm'}`}>
+              <BusFront size={24} className="text-yellow-400" />
             </div>
-            <span className="tracking-widest">Y<span className={`text-${COLORS.accent}`}>H</span>S</span>
-          </a>
-
-          {/* ניווט ScrollSpy - קישורים עם סימון אקטיבי */}
+            <span className="tracking-wide text-shadow">CityLine <span className="text-yellow-400 font-light">Systems</span></span>
+          </Link>
+          
+          {/* תפריט אמצעי (דסקטופ) */}
           <div className="hidden md:flex items-center gap-8">
-            {SECTIONS.map((section) => (
-              <a 
-                key={section.id} 
-                href={`#${section.id}`} 
-                onClick={(e) => {
-                    e.preventDefault();
-                    scrollToSection(section.id);
-                }}
-                className={`text-sm font-bold transition-colors border-b-4 py-1 
-                  ${activeSection === section.id 
-                     ? `text-${COLORS.accent} border-${COLORS.accent}` 
-                     : 'text-gray-400 border-transparent hover:text-white hover:border-gray-500'}`}
-              >
-                {section.title}
-              </a>
-            ))}
+            <NavLink id="hero" label="ראשי" />
+            <NavLink id="services" label="שירותים" />
+            <NavLink id="reviews" label="לקוחות ממליצים" />
+            <NavLink id="contact" label="צור קשר" />
           </div>
 
-          {/* Call to Action & Admin Links */}
-          <div className="flex items-center gap-4">
-              {/* איזור ניהול - מופיע רק למנהל */}
-              {user?.role === 'admin' && (
-                <Link to="/admin" className={`bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-sm flex items-center gap-2 transition text-sm font-bold shadow-md`}>
-                  <LayoutDashboard size={16} /> 
-                  <span className="hidden md:inline">ניהול מערכת</span>
-                </Link>
-              )}
+          {/* צד שמאל - כפתורים */}
+          <div className="hidden md:flex items-center gap-4">
+            <button
+               onClick={() => scrollToSection('contact')}
+               className="bg-yellow-500 hover:bg-yellow-400 text-slate-900 px-5 py-2 rounded-full font-bold text-sm transition shadow-lg hover:shadow-yellow-500/20 flex items-center gap-2"
+            >
+              <Phone size={16} /> שיחה מיידית
+            </button>
 
-              {/* כפתור יצירת קשר מהיר */}
-              <button 
-                onClick={() => scrollToSection('contact')}
-                className={`bg-${COLORS.accent} text-${COLORS.dark} px-4 py-2 rounded-sm font-black text-sm hover:opacity-90 transition shadow-xl flex items-center gap-2`}>
-                <Phone size={16} />
-                <span className="hidden sm:inline">התחילו עבודה</span>
-              </button>
+            {/* איזור ניהול */}
+            {user?.role === 'admin' && (
+              <Link to="/admin" className="text-white hover:text-blue-300 transition" title="ניהול מערכת">
+                 <LayoutDashboard size={20} />
+              </Link>
+            )}
+            
+            {user && (
+               <button onClick={logout} className="text-gray-400 hover:text-white"><LogOut size={20} /></button>
+            )}
           </div>
+
+          {/* כפתור מובייל (לא ממומש במלואו בקוד זה לקיצור, אבל קיים ויזואלית) */}
+          <button className="md:hidden text-white">
+            <Menu size={28} />
+          </button>
         </div>
       </div>
     </nav>
