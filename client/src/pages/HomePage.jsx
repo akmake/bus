@@ -1,41 +1,45 @@
 import { useEffect, useState } from 'react';
-import { Bus, Building2, ShieldCheck, Star, ArrowLeft, CheckCircle2, MapPin, Users, Quote, ChevronLeft, ChevronRight, Phone, Clock } from 'lucide-react';
+import { Bus, Building2, ShieldCheck, Star, ArrowLeft, MapPin, Users, Quote, Phone, Clock } from 'lucide-react';
 import api from '../services/api';
 
 export default function HomePage() {
-  // --- States ---
+  // --- 1. State Management ---
   const [content, setContent] = useState({});
   const [reviews, setReviews] = useState([]);
   
-  // טופס לידים מעודכן לפי המודל החדש
+  // טופס לידים מעודכן לפי המודל החדש (כולל עיר והודעה)
   const [formData, setFormData] = useState({ name: '', phone: '', city: '', message: '' });
   const [formStatus, setFormStatus] = useState('idle'); // idle, loading, success, error
 
   // קרוסלת ביקורות
   const [currentReviewIndex, setCurrentReviewIndex] = useState(0);
 
-  // --- Fetch Data ---
+  // --- 2. Data Fetching ---
   useEffect(() => {
     const init = async () => {
        try {
-         // דיווח כניסה
+         // דיווח כניסה לסטטיסטיקה
          api.post('/track').catch(() => {});
          
-         // שליפת תוכן
+         // שליפת תוכן (CMS)
          const contentRes = await api.get('/content');
          setContent(contentRes.data.data || {});
 
-         // שליפת ביקורות (הנחה שיש נתיב כזה, אם אין - נשתמש בנתוני דמה לתצוגה)
+         // שליפת ביקורות
          try {
-             const reviewsRes = await api.get('/reviews'); // וודא שיש Route כזה בשרת (ציבורי)
+             // נסה לשלוף מהשרת
+             const reviewsRes = await api.get('/reviews'); // שים לב: צריך לוודא שיש Route כזה בשרת
              const fetchedReviews = reviewsRes.data.data || [];
+             
              if (fetchedReviews.length > 0) {
                  setReviews(fetchedReviews);
              } else {
-                 throw new Error('No reviews');
+                 // אם אין ביקורות בשרת, זרוק שגיאה כדי להפעיל את ה-Fallback
+                 throw new Error('No reviews found');
              }
          } catch (e) {
-             // Fallback Data למקרה שאין עדיין נתונים בשרת כדי שהעיצוב לא יישבר
+             // נתוני דמה (Fallback) למקרה שהשרת ריק או שאין עדיין נתיב
+             console.log("Using fallback reviews");
              setReviews([
                  { _id: '1', name: 'ישראל ישראלי', role: 'מנהל תפעול', company: 'אינטל', text: 'שירות יוצא דופן, הנהגים תמיד מגיעים בזמן והרכבים נקיים ומתוחזקים. חוויה מתקנת לעומת חברות אחרות.' },
                  { _id: '2', name: 'שרה כהן', role: 'מנהלת רווחה', company: 'עיריית תל אביב', text: 'אנחנו עובדים עם יחס הסעות כבר שנתיים ומרוצים מכל רגע. הזמינות של המוקד 24/7 היא יתרון עצום עבורנו.' },
@@ -44,40 +48,48 @@ export default function HomePage() {
          }
 
        } catch (err) {
-           console.error('Error init home page', err);
+           console.error('Error initializing home page', err);
        }
     };
     init();
   }, []);
 
-  // --- Auto Rotate Reviews ---
+  // --- 3. Auto Rotate Reviews Logic ---
   useEffect(() => {
       if (reviews.length === 0) return;
+      
       const interval = setInterval(() => {
           setCurrentReviewIndex((prev) => (prev + 1) % reviews.length);
-      }, 6000); // כל 6 שניות החלפה
+      }, 6000); // החלפה כל 6 שניות
+
       return () => clearInterval(interval);
   }, [reviews]);
 
-  // --- Form Handler ---
+  // --- 4. Form Submission Handler ---
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormStatus('loading');
+    
     try {
-      // שליחת הנתונים כולל העיר וההודעה החדשים
+      // שליחת הנתונים לשרת (כולל השדות החדשים)
       await api.post('/leads', formData);
+      
       setFormStatus('success');
-      setFormData({ name: '', phone: '', city: '', message: '' });
+      setFormData({ name: '', phone: '', city: '', message: '' }); // איפוס טופס
+      
+      // איפוס הודעת הצלחה אחרי 3 שניות
       setTimeout(() => setFormStatus('idle'), 3000);
     } catch (err) {
+      console.error(err);
       setFormStatus('error');
     }
   };
 
+  // --- 5. Main Render ---
   return (
     <div className="font-sans text-slate-800 bg-white">
 
-      {/* --- 1. HERO SECTION --- */}
+      {/* === ZONE 1: HERO SECTION === */}
       <section id="hero" className="relative min-h-screen flex items-center justify-center overflow-hidden bg-slate-900">
         
         {/* Background Image with Overlay */}
@@ -90,7 +102,7 @@ export default function HomePage() {
             <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent"></div>
         </div>
 
-        {/* Content */}
+        {/* Hero Content */}
         <div className="container mx-auto px-4 z-10 text-center mt-16">
             <div className="inline-block mb-4 px-4 py-1 rounded-full bg-yellow-500/20 border border-yellow-500/50 backdrop-blur-md">
                 <span className="text-yellow-400 font-bold text-sm tracking-wider uppercase">CityLine Systems</span>
@@ -105,18 +117,24 @@ export default function HomePage() {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <button onClick={() => document.getElementById('contact').scrollIntoView({ behavior: 'smooth' })} className="bg-yellow-500 hover:bg-yellow-400 text-slate-900 px-10 py-4 rounded-xl font-bold text-lg transition shadow-[0_0_20px_rgba(234,179,8,0.4)] flex items-center justify-center gap-2 group">
+                <button 
+                    onClick={() => document.getElementById('contact').scrollIntoView({ behavior: 'smooth' })} 
+                    className="bg-yellow-500 hover:bg-yellow-400 text-slate-900 px-10 py-4 rounded-xl font-bold text-lg transition shadow-[0_0_20px_rgba(234,179,8,0.4)] flex items-center justify-center gap-2 group"
+                >
                     קבלת הצעה בקליק 
                     <ArrowLeft className="group-hover:-translate-x-1 transition-transform" />
                 </button>
-                <button className="bg-white/10 hover:bg-white/20 backdrop-blur-md text-white border border-white/20 px-10 py-4 rounded-xl font-bold text-lg transition flex items-center justify-center gap-2">
+                <button 
+                    onClick={() => window.location.href = "tel:*2055"}
+                    className="bg-white/10 hover:bg-white/20 backdrop-blur-md text-white border border-white/20 px-10 py-4 rounded-xl font-bold text-lg transition flex items-center justify-center gap-2"
+                >
                     <Phone size={20} /> חייגו *2055
                 </button>
             </div>
         </div>
       </section>
 
-      {/* --- 2. TRANSITION BAR (Stats) --- */}
+      {/* === ZONE 2: TRANSITION BAR (Stats Strip) === */}
       <div className="relative z-20 -mt-16 container mx-auto px-4">
           <div className="bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-gray-100 p-8 grid grid-cols-2 md:grid-cols-4 gap-8 divide-x divide-x-reverse divide-gray-100">
               <StatItem icon={<Clock className="text-blue-600" />} number="24/7" label="מוקד זמין" />
@@ -126,7 +144,7 @@ export default function HomePage() {
           </div>
       </div>
 
-      {/* --- 3. SALES / SERVICES SECTION --- */}
+      {/* === ZONE 3: SALES / SERVICES SECTION === */}
       <section id="services" className="py-24 bg-gray-50">
           <div className="container mx-auto px-4">
               <div className="text-center mb-16 max-w-3xl mx-auto">
@@ -158,7 +176,7 @@ export default function HomePage() {
           </div>
       </section>
 
-      {/* --- 4. DYNAMIC REVIEWS SECTION (New!) --- */}
+      {/* === ZONE 4: DYNAMIC REVIEWS SECTION === */}
       <section id="reviews" className="py-24 bg-slate-900 overflow-hidden relative">
           {/* Background decoration */}
           <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[120px]"></div>
@@ -178,8 +196,8 @@ export default function HomePage() {
                               <Quote size={48} className="opacity-50" />
                           </div>
                           
-                          {/* Review Text - Animated Key */}
-                          <div key={currentReviewIndex} className="animate-fade-in-up">
+                          {/* Review Content - with key for animation */}
+                          <div key={currentReviewIndex} className="animate-fade-in">
                               <p className="text-xl md:text-2xl text-white font-medium leading-relaxed mb-8">
                                   "{reviews[currentReviewIndex].text}"
                               </p>
@@ -194,13 +212,14 @@ export default function HomePage() {
                               </div>
                           </div>
 
-                          {/* Controls */}
+                          {/* Slider Dots/Controls */}
                           <div className="flex justify-center gap-2 mt-8">
                              {reviews.map((_, idx) => (
                                  <button 
                                     key={idx}
                                     onClick={() => setCurrentReviewIndex(idx)}
-                                    className={`w-3 h-3 rounded-full transition-all ${idx === currentReviewIndex ? 'bg-yellow-500 w-8' : 'bg-white/30 hover:bg-white/50'}`}
+                                    className={`h-2 rounded-full transition-all duration-300 ${idx === currentReviewIndex ? 'bg-yellow-500 w-8' : 'bg-white/30 w-2 hover:bg-white/50'}`}
+                                    aria-label={`Go to review ${idx + 1}`}
                                  />
                              ))}
                           </div>
@@ -212,7 +231,7 @@ export default function HomePage() {
           </div>
       </section>
 
-      {/* --- 5. CONTACT SECTION --- */}
+      {/* === ZONE 5: CONTACT SECTION === */}
       <section id="contact" className="py-24 bg-white relative">
           <div className="container mx-auto px-4">
               <div className="bg-white rounded-[2rem] shadow-2xl border border-gray-100 overflow-hidden flex flex-col lg:flex-row">
@@ -228,9 +247,9 @@ export default function HomePage() {
                               צרו קשר לקבלת הצעת מחיר מותאמת אישית תוך דקות.
                           </p>
 
-                          <div className="space-y-6">
-                              <div className="flex items-center gap-4">
-                                  <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center text-yellow-400">
+                          <div className="space-y-8">
+                              <div className="flex items-center gap-4 group">
+                                  <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center text-yellow-400 group-hover:bg-yellow-500 group-hover:text-slate-900 transition-colors">
                                       <Phone size={24} />
                                   </div>
                                   <div>
@@ -238,8 +257,8 @@ export default function HomePage() {
                                       <p className="text-xl font-bold">08-8502020</p>
                                   </div>
                               </div>
-                              <div className="flex items-center gap-4">
-                                  <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center text-yellow-400">
+                              <div className="flex items-center gap-4 group">
+                                  <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center text-yellow-400 group-hover:bg-yellow-500 group-hover:text-slate-900 transition-colors">
                                       <Building2 size={24} />
                                   </div>
                                   <div>
@@ -251,7 +270,7 @@ export default function HomePage() {
                       </div>
 
                       <div className="relative z-10 mt-12">
-                          <div className="bg-yellow-500 text-slate-900 p-6 rounded-xl">
+                          <div className="bg-yellow-500 text-slate-900 p-6 rounded-xl shadow-lg">
                               <p className="font-bold text-lg mb-1">זמינים בוואטסאפ!</p>
                               <p className="text-sm opacity-90">שלחו הודעה וקבלו מענה מיידי</p>
                           </div>
@@ -259,7 +278,7 @@ export default function HomePage() {
                   </div>
 
                   {/* Right Side: Form */}
-                  <div className="lg:w-3/5 p-12 bg-gray-50">
+                  <div className="lg:w-3/5 p-8 md:p-12 bg-gray-50">
                       <div className="mb-8">
                           <h3 className="text-3xl font-bold text-slate-900 mb-2">בואו נתקדם</h3>
                           <p className="text-gray-500">מלאו את הפרטים ונחזור אליכם בהקדם</p>
@@ -331,7 +350,7 @@ export default function HomePage() {
   );
 }
 
-// --- Components פנימיים ---
+// --- Helper Functions (Components) ---
 
 function StatItem({ icon, number, label }) {
     return (
