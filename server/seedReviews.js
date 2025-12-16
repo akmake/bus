@@ -116,7 +116,7 @@ const reviews = [
 const seedDB = async () => {
   try {
     // התחברות ל-DB (משתמש ב-URI מה-env או ברירת מחדל מקומית)
-    await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/chabad_kfar_yona');
+    await mongoose.connect(process.env.MONGO_URI || 'mongodb+srv://yosefdaean_db_user:lPkTYXPmJ1TBJiyt@cluster0.3o2c7zy.mongodb.net/?appName=Cluster0');
     console.log('🔌 MongoDB Connected');
 
     // מחיקת ביקורות קיימות (כדי לא ליצור כפילויות בהרצות חוזרות)
