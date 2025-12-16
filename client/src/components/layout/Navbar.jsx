@@ -10,7 +10,7 @@ export default function Navbar() {
   const [activeSection, setActiveSection] = useState('hero');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // רשימת הקישורים בתפריט
+  // הגדרת אזורי הגלילה
   const MENU_ITEMS = [
     { id: 'hero', label: 'ראשי' },
     { id: 'services', label: 'שירותים' },
@@ -18,11 +18,9 @@ export default function Navbar() {
     { id: 'contact', label: 'צור קשר' },
   ];
 
-  // פונקציית גלילה חלקה
   const scrollToSection = (id) => {
-    setMobileMenuOpen(false); // סגירת תפריט מובייל אם פתוח
+    setMobileMenuOpen(false);
     
-    // אם אנחנו לא בדף הבית, קודם נעבור אליו (אופציונלי, כרגע נניח שהנאבר הזה הוא לדף הבית)
     if (location.pathname !== '/') {
         window.location.href = `/#${id}`;
         return;
@@ -30,8 +28,7 @@ export default function Navbar() {
 
     const element = document.getElementById(id);
     if (element) {
-      // קיזוז של הגובה של הנאבר (כדי שהכותרת לא תוסתר)
-      const offset = 80; 
+      const offset = 80; // קיזוז גובה הנאבר
       const bodyRect = document.body.getBoundingClientRect().top;
       const elementRect = element.getBoundingClientRect().top;
       const elementPosition = elementRect - bodyRect;
@@ -44,14 +41,13 @@ export default function Navbar() {
     }
   };
 
-  // מעקב אחרי גלילה - גם לשינוי רקע הנאבר וגם לזיהוי האזור הפעיל
+  // מנגנון Scroll Spy וזיהוי גלילה
   useEffect(() => {
     const handleScroll = () => {
-      // 1. שינוי רקע הנאבר כשגוללים
+      // 1. שינוי עיצוב הנאבר בגלילה
       setIsScrolled(window.scrollY > 50);
 
-      // 2. זיהוי האזור הנוכחי (Scroll Spy)
-      // רק אם אנחנו בדף הבית
+      // 2. זיהוי האזור הפעיל
       if (location.pathname === '/') {
         let current = '';
         const sections = MENU_ITEMS.map(item => item.id);
@@ -60,7 +56,7 @@ export default function Navbar() {
           const element = document.getElementById(section);
           if (element) {
              const rect = element.getBoundingClientRect();
-             // אם החלק העליון של האלמנט נמצא בשליש העליון של המסך
+             // אם אזור נמצא בטווח הראייה
              if (rect.top <= 150 && rect.bottom >= 150) {
                current = section;
              }
@@ -87,7 +83,7 @@ export default function Navbar() {
             <span className="tracking-wide hidden sm:block">CityLine <span className="text-blue-400 font-light">Systems</span></span>
           </Link>
 
-          {/* תפריט דסקטופ */}
+          {/* תפריט דסקטופ (גלולות) */}
           <div className="hidden md:flex items-center gap-1 bg-white/5 p-1 rounded-full border border-white/10 backdrop-blur-sm">
              {MENU_ITEMS.map((item) => (
                <button
@@ -103,29 +99,24 @@ export default function Navbar() {
              ))}
           </div>
 
-          {/* כפתורי צד (אדמין / מובייל) */}
+          {/* כפתורי צד */}
           <div className="flex items-center gap-3">
-            
-            {/* כפתור התקשרות מהיר (מופיע תמיד) */}
             <a href="tel:088587626" className="flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-full text-sm font-bold transition shadow-lg shadow-green-900/20">
                <Phone size={16} /> <span className="hidden lg:inline">08-8587626</span>
             </a>
 
-            {/* כפתור ניהול (רק לאדמין) */}
             {user?.role === 'admin' && (
               <Link to="/admin" className="text-gray-300 hover:text-white p-2 transition" title="ניהול">
                 <LayoutDashboard size={20} />
               </Link>
             )}
 
-            {/* כפתור יציאה (אם מחובר) */}
             {user && (
                <button onClick={logout} className="text-gray-300 hover:text-red-400 p-2 transition" title="התנתק">
                   <LogOut size={20} />
                </button>
             )}
 
-            {/* המבורגר למובייל */}
             <button 
               className="md:hidden text-white p-2"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -136,7 +127,7 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* תפריט מובייל נפתח */}
+      {/* תפריט מובייל */}
       {mobileMenuOpen && (
         <div className="md:hidden absolute top-full left-0 w-full bg-slate-900 border-t border-slate-800 shadow-2xl animate-fade-in">
            <div className="flex flex-col p-4 space-y-2">
