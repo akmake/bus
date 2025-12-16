@@ -12,25 +12,23 @@ const signToken = (id) => {
 // יצירה ושליחת עוגייה
 const createSendToken = (user, statusCode, res) => {
   const token = signToken(user._id);
+  
   const cookieOptions = {
-    expires: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 יום
+    expires: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), 
     httpOnly: true,
-    secure: false, // בגלל שאנחנו בלוקאל (HTTP), חייב להיות false
-    sameSite: 'lax' // מאפשר קוקיז בלוקאל
+    secure: true, 
+    sameSite: 'none'
   };
 
   res.cookie('jwt', token, cookieOptions);
 
-  user.password = undefined; // הסתרת סיסמה
-  
-  console.log('✅ Login Successful! Token sent to client.');
+  user.password = undefined;
   
   res.status(statusCode).json({
     status: 'success',
     data: { user }
   });
 };
-
 export const register = async (req, res, next) => {
   try {
     const newUser = await User.create({
