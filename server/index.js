@@ -31,8 +31,12 @@ connectDB();
 
 // 1. אבטחה וגישה
 app.use(cors({
-  origin: 'http://localhost:5173', // הכתובת של ה-Client
-  credentials: true // מאפשר שליחת עוגיות (Cookies)
+  // אנחנו מאשרים גם את הלוקאל (בשביל פיתוח) וגם את הדומיין של הלקוח ב-Render
+  origin: [
+    'http://localhost:5173', 
+    'https://passover1-1.onrender.com' // <--- הכתובת של הקליינט
+  ],
+  credentials: true 
 }));
 app.use(helmet()); // אבטחת כותרות HTTP
 
