@@ -1,10 +1,9 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import Review from './models/reviewModel.js'; // וודא שהנתיב תואם למיקום הקובץ
+import Review from './models/reviewModel.js';
 
 dotenv.config();
 
-// נתוני דמו - 15 ביקורות מגוונות
 const reviews = [
   {
     name: "דנה כהן",
@@ -115,15 +114,17 @@ const reviews = [
 
 const seedDB = async () => {
   try {
-    // התחברות ל-DB (משתמש ב-URI מה-env או ברירת מחדל מקומית)
-    await mongoose.connect(process.env.MONGO_URI || 'mongodb+srv://yosefdaean_db_user:lPkTYXPmJ1TBJiyt@cluster0.3o2c7zy.mongodb.net/?appName=Cluster0');
+    // חיבור לכתובת המתוקנת (אותה אחת כמו בשרת)
+    const uri = process.env.MONGO_URI || 'mongodb+srv://yosefdaean_db_user:lPkTYXPmJ1TBJiyt@cluster0.3o2c7zy.mongodb.net/cityline_db?appName=Cluster0';
+    
+    await mongoose.connect(uri);
     console.log('🔌 MongoDB Connected');
 
-    // מחיקת ביקורות קיימות (כדי לא ליצור כפילויות בהרצות חוזרות)
+    // ניקוי נתונים ישנים
     await Review.deleteMany({});
     console.log('🗑️  Old reviews deleted');
 
-    // הוספת החדשים
+    // הכנסת נתונים חדשים
     await Review.insertMany(reviews);
     console.log('✅ 15 Mock reviews added successfully!');
 

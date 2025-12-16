@@ -5,35 +5,32 @@ import AppError from '../utils/AppError.js';
 // יצירת טוקן
 const signToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN
+    expiresIn: process.env.JWT_EXPIRES_IN || '90d'
   });
 };
 
 // יצירה ושליחת עוגייה
 const createSendToken = (user, statusCode, res) => {
   const token = signToken(user._id);
-
   const cookieOptions = {
     expires: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 יום
-    httpOnly: true, // מונע גישה לקוקי דרך JS בדפדפן (אבטחה)
-    secure: process.env.NODE_ENV === 'production', // ב-Production רק ב-HTTPS
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+    httpOnly: true,
+    secure: false, // בגלל שאנחנו בלוקאל (HTTP), חייב להיות false
+    sameSite: 'lax' // מאפשר קוקיז בלוקאל
   };
 
   res.cookie('jwt', token, cookieOptions);
 
-  // הסרת הסיסמה מהפלט
-  user.password = undefined;
-
+  user.password = undefined; // הסתרת סיסמה
+  
+  console.log('✅ Login Successful! Token sent to client.');
+  
   res.status(statusCode).json({
     status: 'success',
-    data: {
-      user
-    }
+    data: { user }
   });
 };
 
-// הרשמה (לשימוש ראשוני או למנהלים)
 export const register = async (req, res, next) => {
   try {
     const newUser = await User.create({
@@ -42,34 +39,50 @@ export const register = async (req, res, next) => {
       password: req.body.password,
       role: req.body.role || 'user'
     });
-
     createSendToken(newUser, 201, res);
   } catch (err) {
     next(err);
   }
 };
 
-// התחברות
+// --- פונקציית ההתחברות עם הדיבאג ---
 export const login = async (req, res, next) => {
   const { email, password } = req.body;
 
-  // 1. בדיקה אם יש אימייל וסיסמה
+  // הדפסה לטרמינל כדי שנראה מה מגיע מהאתר
+  console.log('\n--- Login Attempt ---');
+  console.log('Email received:', email);
+  console.log('Password received:', password);
+
+  // 1. בדיקת קלט
   if (!email || !password) {
+    console.log('❌ Missing email or password');
     return next(new AppError('Please provide email and password', 400));
   }
 
-  // 2. בדיקה אם המשתמש קיים והסיסמה נכונה
+  // 2. חיפוש המשתמש
   const user = await User.findOne({ email }).select('+password');
-
-  if (!user || !(await user.correctPassword(password, user.password))) {
+  
+  if (!user) {
+    console.log('❌ User not found in DB');
     return next(new AppError('Incorrect email or password', 401));
   }
 
-  // 3. שליחת טוקן
+  console.log('User found in DB:', user.email);
+  console.log('User Role:', user.role);
+
+  // 3. בדיקת סיסמה
+  const isMatch = await user.correctPassword(password, user.password);
+  
+  if (!isMatch) {
+    console.log('❌ Password Incorrect');
+    return next(new AppError('Incorrect email or password', 401));
+  }
+
+  // 4. הצלחה
   createSendToken(user, 200, res);
 };
 
-// התנתקות
 export const logout = (req, res) => {
   res.cookie('jwt', 'loggedout', {
     expires: new Date(Date.now() + 10 * 1000),
@@ -78,9 +91,7 @@ export const logout = (req, res) => {
   res.status(200).json({ status: 'success' });
 };
 
-// בדיקה מי המשתמש המחובר (עבור הקליינט)
 export const getMe = async (req, res, next) => {
-  // המידלוור protect כבר שם את המשתמש ב-req.user
   res.status(200).json({
     status: 'success',
     data: { user: req.user }
