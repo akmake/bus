@@ -17,19 +17,29 @@ export default function HomePage() {
 
   // טעינה ראשונית: מעקב כניסות + משיכת ביקורות
   useEffect(() => {
-    const initData = async () => {
-      try {
-        api.post('/track').catch(() => {}); // מעקב שקט
-        const res = await api.get('/reviews');
-        if (res.data.data.reviews && res.data.data.reviews.length > 0) {
-          setReviews(res.data.data.reviews);
+      const initData = async () => {
+        try {
+          api.post('/track').catch(() => {}); // מעקב שקט
+          
+          const res = await api.get('/reviews');
+          
+          // --- שורת בדיקה: פתח את הקונסול בדפדפן (F12) ותראה מה מודפס כאן ---
+          console.log("תשובת שרת מלאה:", res); 
+
+          // --- התיקון: שימוש בסימן שאלה (?) למניעת קריסה אם המידע חסר ---
+          if (res.data?.data?.reviews) {
+            setReviews(res.data.data.reviews);
+          } else if (res.data?.reviews) {
+            // גיבוי למקרה שהמבנה שטוח יותר
+            setReviews(res.data.reviews);
+          }
+
+        } catch (err) {
+          console.error("Failed to fetch reviews", err);
         }
-      } catch (err) {
-        console.error("Failed to fetch reviews", err);
-      }
-    };
-    initData();
-  }, []);
+      };
+      initData();
+    }, []);
 
   // רוטציה של הביקורות
   useEffect(() => {
