@@ -17,29 +17,30 @@ export default function HomePage() {
 
   // טעינה ראשונית: מעקב כניסות + משיכת ביקורות
   useEffect(() => {
-      const initData = async () => {
-        try {
-          api.post('/track').catch(() => {}); // מעקב שקט
-          
-          const res = await api.get('/reviews');
-          
-          // --- שורת בדיקה: פתח את הקונסול בדפדפן (F12) ותראה מה מודפס כאן ---
-          console.log("תשובת שרת מלאה:", res); 
-
-          // --- התיקון: שימוש בסימן שאלה (?) למניעת קריסה אם המידע חסר ---
-          if (res.data?.data?.reviews) {
-            setReviews(res.data.data.reviews);
-          } else if (res.data?.reviews) {
-            // גיבוי למקרה שהמבנה שטוח יותר
-            setReviews(res.data.reviews);
-          }
-
-        } catch (err) {
-          console.error("Failed to fetch reviews", err);
+    const initData = async () => {
+      try {
+        // ניסיון לשלוח מעקב
+        api.post('/track').catch(() => {}); 
+        
+        // משיכת הביקורות
+        const res = await api.get('/reviews');
+        
+        // בדיקת בטיחות: האם התשובה היא באמת מידע ולא HTML?
+        const isHtml = typeof res.data === 'string' && res.data.startsWith('<!doctype html>');
+        
+        if (!isHtml && res.data?.data?.reviews) {
+          // רק אם זה מידע תקין - נעדכן את הסטייט
+          setReviews(res.data.data.reviews);
+        } else {
+          console.warn("השרת החזיר HTML במקום נתונים - וודא שה-Backend דלוק בפורט 5000");
         }
-      };
-      initData();
-    }, []);
+
+      } catch (err) {
+        console.error("Failed to fetch reviews", err);
+      }
+    };
+    initData();
+  }, []);
 
   // רוטציה של הביקורות
   useEffect(() => {
