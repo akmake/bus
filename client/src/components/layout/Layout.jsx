@@ -1,91 +1,38 @@
-// src/components/Navbar.jsx
-import React from 'react';
-import { Link } from 'react-router-dom';
-// הנחה: useAuthStore נמצא ב-src/stores/authStore.js
-// אם הנתיב לא נכון אצלך, וודא שאתה מייבא אותו נכון
-import { useAuthStore } from '@/stores/authStore'; 
-import { Phone, LogOut, LayoutDashboard, BusFront } from 'lucide-react';
+import { Outlet, Link } from 'react-router-dom'; // וודא ש-Link מיובא
+import Navbar from './Navbar';
 
-const COLORS = {
-    dark: 'slate-900',
-    accent: 'amber-500', 
-};
-
-// הגדרת האזורים כפי שהוגדרו בקובץ ה-HomePage
-const SECTIONS = [
-  { id: 'top', title: 'ראשי' },
-  { id: 'fleet', title: 'הצי שלנו' },
-  { id: 'management', title: 'ניהול ובטיחות' },
-  { id: 'contact', title: 'צור קשר' },
-];
-
-/**
- * קומפוננטת ניווט עליונה
- * @param {object} props
- * @param {string} props.activeSection - מזהה האזור הפעיל (לצורך ScrollSpy)
- */
-export default function Navbar({ activeSection }) {
-  // אם אין useAuthStore, אפשר להסיר את השורות הבאות ולהשתמש ב-{} במקום user
-  const { user, logout } = useAuthStore(); 
-  
-  // פונקציה פשוטה לגלול לאלמנט
-  const scrollToSection = (id) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
-  };
-
+export default function Layout() {
   return (
-    <nav className={`bg-${COLORS.dark} text-white shadow-xl sticky top-0 z-50 border-b-4 border-${COLORS.accent}`}>
-      <div className="container mx-auto px-4">
-        <div className="flex justify-between items-center h-16">
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      <Navbar />
+      
+      <main className="flex-grow">
+        <Outlet />
+      </main>
 
-          {/* לוגו: חזק ותעשייתי */}
-          <a href="#top" onClick={() => scrollToSection('top')} className="text-2xl font-black flex items-center gap-3 hover:opacity-90 transition cursor-pointer">
-            <div className={`text-${COLORS.accent} bg-white/5 p-2 rounded-sm border border-${COLORS.accent}`}>
-              <BusFront size={24} />
+      <footer className="bg-slate-900 text-slate-400 py-8 border-t border-slate-800 text-sm">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            
+            <div className="text-center md:text-right">
+              <p className="font-bold text-slate-200 mb-1">CityLine Systems</p>
+              <p>פתרונות תחבורה והיסעים למוסדות וארגונים.</p>
             </div>
-            <span className="tracking-widest">Y<span className={`text-${COLORS.accent}`}>H</span>S</span>
-          </a>
 
-          {/* ניווט ScrollSpy - קישורים עם סימון אקטיבי */}
-          <div className="hidden md:flex items-center gap-8">
-            {SECTIONS.map((section) => (
-              <a 
-                key={section.id} 
-                href={`#${section.id}`} 
-                onClick={(e) => {
-                    e.preventDefault();
-                    scrollToSection(section.id);
-                }}
-                className={`text-sm font-bold transition-colors border-b-4 py-1 
-                  ${activeSection === section.id 
-                     ? `text-${COLORS.accent} border-${COLORS.accent}` 
-                     : 'text-gray-400 border-transparent hover:text-white hover:border-gray-500'}`}
-              >
-                {section.title}
-              </a>
-            ))}
-          </div>
+            {/* הקישורים האמיתיים */}
+            <div className="flex gap-6 text-xs">
+              <Link to="/terms" className="hover:text-white transition">תנאי שימוש</Link>
+              <Link to="/privacy" className="hover:text-white transition">מדיניות פרטיות</Link>
+              <Link to="/accessibility" className="hover:text-white transition">הצהרת נגישות</Link>
+            </div>
 
-          {/* Call to Action & Admin Links */}
-          <div className="flex items-center gap-4">
-              {/* איזור ניהול - מופיע רק למנהל */}
-              {user?.role === 'admin' && (
-                <Link to="/admin" className={`bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-sm flex items-center gap-2 transition text-sm font-bold shadow-md`}>
-                  <LayoutDashboard size={16} /> 
-                  <span className="hidden md:inline">ניהול מערכת</span>
-                </Link>
-              )}
-
-              {/* כפתור יצירת קשר מהיר */}
-              <button 
-                onClick={() => scrollToSection('contact')}
-                className={`bg-${COLORS.accent} text-${COLORS.dark} px-4 py-2 rounded-sm font-black text-sm hover:opacity-90 transition shadow-xl flex items-center gap-2`}>
-                <Phone size={16} />
-                <span className="hidden sm:inline">התחילו עבודה</span>
-              </button>
+            <div className="text-slate-600">
+              © {new Date().getFullYear()} כל הזכויות שמורות.
+            </div>
+            
           </div>
         </div>
-      </div>
-    </nav>
+      </footer>
+    </div>
   );
 }
