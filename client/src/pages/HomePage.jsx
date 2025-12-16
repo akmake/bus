@@ -221,10 +221,6 @@ export default function HomePage() {
                               </div>
                            </div>
                         </div>
-                        {/* פס התקדמות כחול */}
-                        <div className="absolute bottom-0 left-0 h-1.5 bg-blue-50 w-full rounded-bl-3xl overflow-hidden">
-                           <div key={currentReviewIndex} className="h-full bg-blue-600 w-full origin-left animate-[progress_5s_linear]"></div>
-                        </div>
                      </div>
                   ) : (
                     <div className="text-center text-gray-400 p-10 border-2 border-dashed border-gray-200 rounded-3xl animate-pulse">
