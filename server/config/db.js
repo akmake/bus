@@ -2,15 +2,9 @@ import mongoose from 'mongoose';
 
 const connectDB = async () => {
   try {
-    const uri = process.env.MONGO_URI || '...הכתובת שלך...';
-    
+    const uri = process.env.MONGO_URI || 'mongodb://localhost:27017/bus';
     const conn = await mongoose.connect(uri);
-    
-    // --- הוסף את השורה הזו ---
-    console.log(`🚨 SMOKING GUN: Connected to Database name: "${conn.connection.name}"`); 
-    // -------------------------
-    
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
+    console.log(`MongoDB Connected: ${conn.connection.host} / ${conn.connection.name}`);
   } catch (error) {
     console.error(`Error: ${error.message}`);
     process.exit(1);

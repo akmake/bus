@@ -5,8 +5,9 @@ import { useAuthStore } from '@/stores/authStore';
 import Layout from '@/components/layout/Layout';
 import HomePage from '@/pages/HomePage';
 import AdminPage from '@/pages/AdminPage';
-import LoginPage from '@/pages/LoginPage'; // <--- הדף החדש
-import ProtectedRoute from '@/components/auth/ProtectedRoute'; // <--- השומר
+import LoginPage from '@/pages/LoginPage';
+import BusPage from '@/pages/BusPage';
+import ProtectedRoute from '@/components/auth/ProtectedRoute';
 
 // Legal Pages
 import TermsPage from '@/pages/legal/TermsPage';
@@ -32,6 +33,9 @@ function App() {
 
         {/* דף כניסה - פתוח לכולם */}
         <Route path="login" element={<LoginPage />} />
+
+        {/* לוח זמנים לאוטובוסים */}
+        <Route path="buses" element={<BusPage />} />
         
         {/* דף ניהול - מוגן! */}
         <Route 

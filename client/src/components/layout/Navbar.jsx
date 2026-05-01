@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
-import { BusFront, Phone, LogOut, LayoutDashboard, Menu, X } from 'lucide-react';
+import { BusFront, Phone, LogOut, LayoutDashboard, Menu, X, Clock } from 'lucide-react';
 
 export default function Navbar() {
   const { user, logout } = useAuthStore();
@@ -104,6 +104,15 @@ export default function Navbar() {
             <a href="tel:088587626" className="flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-full text-sm font-bold transition shadow-lg shadow-green-900/20">
                <Phone size={16} /> <span className="hidden lg:inline">08-8587626</span>
             </a>
+
+            <Link
+              to="/buses"
+              className="flex items-center gap-1.5 bg-blue-700 hover:bg-blue-600 text-white px-3 py-2 rounded-full text-sm font-medium transition"
+              title="לוח זמנים לאוטובוסים"
+            >
+              <Clock size={15} />
+              <span className="hidden lg:inline">לוח זמנים</span>
+            </Link>
 
             {user?.role === 'admin' && (
               <Link to="/admin" className="text-gray-300 hover:text-white p-2 transition" title="ניהול">

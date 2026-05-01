@@ -9,6 +9,7 @@ import globalErrorHandler from './middlewares/errorMiddleware.js';
 import AppError from './utils/AppError.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import busRoutes from './routes/busRoutes.js';
 import { apiLimiter } from './middlewares/rateLimiter.js';
 
 dotenv.config();
@@ -41,6 +42,7 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/buses', busRoutes);
 app.use('/api', dashboardRoutes);
 
 app.all('*', (req, res, next) => {
