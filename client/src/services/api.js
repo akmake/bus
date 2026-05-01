@@ -1,13 +1,15 @@
 import axios from 'axios';
 
-// שינוי הכתובת לשרת האמיתי ב-Render
+// Default to Vite proxy in development (/api -> localhost:5000).
+// In production, set VITE_API_BASE_URL to a full API URL if needed.
+const baseURL = import.meta.env.VITE_API_BASE_URL || '/api';
+
 const api = axios.create({
-  baseURL: 'https://passover1.onrender.com/api', // <--- הכתובת של השרת
+  baseURL,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// ... המשך הקובץ אותו דבר
 export default api;
