@@ -22,15 +22,27 @@ const userIcon = L.icon({
   popupAnchor: [1, -34],
 });
 
-const busIcon = L.icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-});
-
 const FALLBACK_LOCATION = [32.0853, 34.7818];
+
+const escapeHtml = (value = '') =>
+  String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+
+const buildRouteMarkerIcon = (routeNumber) => {
+  const label = escapeHtml(routeNumber || '?');
+
+  return L.divIcon({
+    className: 'route-bus-marker-wrap',
+    html: `<div class="route-bus-marker">${label}</div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+    popupAnchor: [0, -16],
+  });
+};
 
 const MapUpdater = ({ center }) => {
   const map = useMap();
@@ -44,6 +56,7 @@ const BusPage = () => {
   const [location, setLocation] = useState(null);
   const [stops, setStops] = useState([]);
   const [selectedStopCode, setSelectedStopCode] = useState(null);
+  const [selectedRouteNumber, setSelectedRouteNumber] = useState(null);
   const [selectedStopArrivals, setSelectedStopArrivals] = useState([]);
   const [liveVehicles, setLiveVehicles] = useState([]);
   const [loadingStops, setLoadingStops] = useState(true);
@@ -66,13 +79,15 @@ const BusPage = () => {
     }
   }, []);
 
-  const fetchStopDetails = useCallback(async (stopCode) => {
+  const fetchStopDetails = useCallback(async (stopCode, options = {}) => {
+    const { routeNumber = null, showLoader = true } = options;
+
     try {
-      setLoadingStopDetails(true);
+      if (showLoader) setLoadingStopDetails(true);
       setPageError('');
       const [arrivalsRes, liveRes] = await Promise.all([
         busApi.getArrivals(stopCode),
-        busApi.getLiveVehicles(stopCode),
+        busApi.getLiveVehicles(stopCode, routeNumber),
       ]);
 
       setSelectedStopArrivals(arrivalsRes.data?.arrivals || []);
@@ -85,7 +100,7 @@ const BusPage = () => {
       setAutoRefreshEnabled(false);
       setPageError('אין תקשורת לשרת כרגע (ECONNREFUSED). הפעל את השרת המקומי על פורט 5000.');
     } finally {
-      setLoadingStopDetails(false);
+      if (showLoader) setLoadingStopDetails(false);
     }
   }, []);
 
@@ -108,16 +123,33 @@ const BusPage = () => {
     if (!selectedStopCode || !autoRefreshEnabled) return;
 
     const interval = setInterval(() => {
-      fetchStopDetails(selectedStopCode);
-    }, 15000);
+      fetchStopDetails(selectedStopCode, {
+        routeNumber: selectedRouteNumber,
+        showLoader: false,
+      });
+    }, 10000);
 
     return () => clearInterval(interval);
-  }, [fetchStopDetails, selectedStopCode, autoRefreshEnabled]);
+  }, [fetchStopDetails, selectedStopCode, selectedRouteNumber, autoRefreshEnabled]);
 
   const handleStopClick = async (stopCode) => {
     setSelectedStopCode(stopCode);
+    setSelectedRouteNumber(null);
+    setLiveVehicles([]);
     setAutoRefreshEnabled(true);
-    await fetchStopDetails(stopCode);
+    await fetchStopDetails(stopCode, { routeNumber: null });
+  };
+
+  const handleRouteClick = async (routeNumber) => {
+    if (!selectedStopCode) return;
+    setSelectedRouteNumber(routeNumber);
+    await fetchStopDetails(selectedStopCode, { routeNumber });
+  };
+
+  const handleResetRouteFilter = async () => {
+    if (!selectedStopCode) return;
+    setSelectedRouteNumber(null);
+    await fetchStopDetails(selectedStopCode, { routeNumber: null });
   };
 
   if (!location && loadingStops) {
@@ -125,10 +157,15 @@ const BusPage = () => {
   }
 
   return (
-    <div className="h-screen w-full flex flex-col">
+    <div className="h-[calc(100vh-6rem)] w-full flex flex-col mt-24">
       <div className="p-4 bg-blue-600 text-white shadow-md z-10 relative">
         <h1 className="text-2xl font-bold">מפת אוטובוסים בזמן אמת</h1>
         <p className="text-sm">מוצגות כל התחנות בטווח 10 ק"מ: {stops.length}</p>
+        {selectedRouteNumber && (
+          <p className="text-xs mt-1 bg-blue-700 inline-block px-2 py-1 rounded">
+            סינון פעיל: קו {selectedRouteNumber}
+          </p>
+        )}
         {pageError && <p className="text-xs mt-2 bg-red-500/80 inline-block px-2 py-1 rounded">{pageError}</p>}
       </div>
 
@@ -154,7 +191,7 @@ const BusPage = () => {
                 position={[stop.lat, stop.lon]}
                 eventHandlers={{ click: () => handleStopClick(stop.code) }}
               >
-                <Popup className="w-64">
+                <Popup className="w-72">
                   <div className="text-right" dir="rtl">
                     <h3 className="font-bold text-lg border-b pb-1 mb-2">{stop.name}</h3>
                     <p className="text-sm text-gray-600 mb-2">מספר תחנה: {stop.code}</p>
@@ -171,6 +208,16 @@ const BusPage = () => {
                           <p className="text-sm italic">אין כרגע אוטובוסים קרובים לתחנה זו</p>
                         )}
 
+                        {!loadingStopDetails && selectedRouteNumber && (
+                          <button
+                            type="button"
+                            onClick={handleResetRouteFilter}
+                            className="text-xs mb-2 bg-slate-700 text-white px-2 py-1 rounded"
+                          >
+                            הצג את כל הקווים בתחנה
+                          </button>
+                        )}
+
                         {!loadingStopDetails && selectedStopArrivals.length > 0 && (
                           <ul className="space-y-2">
                             {selectedStopArrivals.slice(0, 10).map((arrival, idx) => {
@@ -178,9 +225,23 @@ const BusPage = () => {
                                 hour: '2-digit',
                                 minute: '2-digit',
                               });
+                              const routeNumber = String(arrival.routeNumber || '').trim();
+                              const isRouteSelected = selectedRouteNumber === routeNumber;
                               return (
-                                <li key={`arr-${idx}`} className="bg-gray-50 p-1 rounded border">
-                                  <span className="font-bold text-blue-600">קו {arrival.routeNumber || '-'}</span> - יגיע ב: {time}
+                                <li key={`arr-${idx}`}>
+                                  <button
+                                    type="button"
+                                    disabled={!routeNumber}
+                                    onClick={() => routeNumber && handleRouteClick(routeNumber)}
+                                    className={`w-full text-right bg-gray-50 p-2 rounded border ${
+                                      isRouteSelected ? 'border-blue-600 bg-blue-50' : 'border-gray-200'
+                                    }`}
+                                  >
+                                    <span className="font-bold text-blue-600">קו {routeNumber || '-'}</span> - יגיע ב: {time}
+                                    <span className="block text-xs text-gray-700 mt-0.5">
+                                      לכיוון: {arrival.routeName || 'יעד לא זמין'}
+                                    </span>
+                                  </button>
                                 </li>
                               );
                             })}
@@ -195,11 +256,19 @@ const BusPage = () => {
           })}
 
           {liveVehicles.map((vehicle, idx) => (
-            <Marker key={`bus-${vehicle.rideId || idx}`} position={[vehicle.lat, vehicle.lon]} icon={busIcon}>
+            <Marker
+              key={`bus-${vehicle.rideId || idx}-${vehicle.routeNumber || 'route'}`}
+              position={[vehicle.lat, vehicle.lon]}
+              icon={buildRouteMarkerIcon(vehicle.routeNumber)}
+            >
               <Popup>
                 <div className="text-right" dir="rtl">
-                  <strong className="text-green-600 border-b block pb-1 mb-1">אוטובוס בזמן אמת</strong>
+                  <strong className="text-blue-600 border-b block pb-1 mb-1">אוטובוס בזמן אמת</strong>
+                  <p className="text-sm">קו: {vehicle.routeNumber || vehicle.lineRef || '-'}</p>
+                  <p className="text-sm">לכיוון: {vehicle.routeName || 'יעד לא זמין'}</p>
+                  <p className="text-sm">רכב: {vehicle.vehicleRef ?? '-'}</p>
                   <p className="text-sm">מהירות: {vehicle.velocity ?? '-'} קמ"ש</p>
+                  <p className="text-sm">מרחק מהתחנה: {vehicle.distanceFromStopMeters ?? '-'} מ'</p>
                   <p className="text-xs text-gray-500 mt-1">עודכן: {new Date(vehicle.recordedAt).toLocaleTimeString('he-IL')}</p>
                 </div>
               </Popup>

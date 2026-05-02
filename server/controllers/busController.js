@@ -3,11 +3,16 @@ import BusStop from '../models/busStopModel.js';
 
 const STRIDE_API = 'https://open-bus-stride-api.hasadna.org.il';
 const STOPS_SYNC_TTL_MS = 24 * 60 * 60 * 1000;
+const ARRIVALS_CACHE_TTL_MS = 90 * 1000;
+const LIVE_CACHE_TTL_MS = 45 * 1000;
+const LIVE_MAX_AGE_MS = 90 * 1000;
 const DEFAULT_RADIUS_METERS = 10000;
 const MAX_RADIUS_METERS = 10000;
 const MIN_RADIUS_METERS = 100;
 const STOPS_PAGE_SIZE = 500;
 const STOPS_MAX_PAGES = 300;
+const arrivalsCache = new Map();
+const liveVehiclesCache = new Map();
 
 const getToday = () => new Date().toISOString().split('T')[0];
 
@@ -197,6 +202,54 @@ const clampRadius = (radiusInput) => {
   return Math.min(Math.max(parsed, MIN_RADIUS_METERS), MAX_RADIUS_METERS);
 };
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const fetchJsonWithRetry = async (
+  url,
+  { timeoutMs = 10000, retries = 1, retryDelayMs = 250 } = {}
+) => {
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new AppError(
+          `Upstream ${response.status} from Open Bus${body ? `: ${body.slice(0, 180)}` : ''}`,
+          502
+        );
+      }
+
+      return await response.json();
+    } catch (error) {
+      clearTimeout(timer);
+      lastError = error;
+      if (attempt < retries) {
+        await sleep(retryDelayMs * (attempt + 1));
+      }
+    }
+  }
+
+  throw lastError || new AppError('Unknown upstream fetch error', 502);
+};
+
+const setCacheValue = (cache, key, value) => {
+  cache.set(key, { value, updatedAt: Date.now() });
+};
+
+const getFreshCacheValue = (cache, key, ttlMs) => {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.updatedAt > ttlMs) return null;
+  return entry.value;
+};
+
 const queryNearbyStopsFromDb = async ({ lat, lon, radius }) => {
   const docs = await BusStop.aggregate([
     {
@@ -364,102 +417,245 @@ export const searchStops = async (req, res, next) => {
 export const getStopArrivals = async (req, res, next) => {
   try {
     const { stopCode } = req.params;
+    const stopCodeStr = String(stopCode);
 
     const now = new Date();
-    const future = new Date(now.getTime() + 90 * 60 * 1000);
-
-    const fromStr = now.toISOString().replace('Z', '+00:00');
-    const toStr = future.toISOString().replace('Z', '+00:00');
+    const future = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+    const fromDate = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const toDate = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
 
     const params = new URLSearchParams({
-      arrival_time_from: fromStr,
-      arrival_time_to: toStr,
-      gtfs_stop__code: stopCode,
-      limit: 100,
+      arrival_time_from: now.toISOString(),
+      arrival_time_to: future.toISOString(),
+      gtfs_stop__code: stopCodeStr,
+      gtfs_route__date_from: fromDate,
+      gtfs_route__date_to: toDate,
+      limit: 250,
       order_by: 'arrival_time asc',
     });
 
-    const response = await fetch(`${STRIDE_API}/siri_ride_stops/list?${params.toString()}`);
-    if (!response.ok) {
-      return next(new AppError('Failed to fetch arrivals from external source', 502));
-    }
+    const data = await fetchJsonWithRetry(
+      `${STRIDE_API}/gtfs_ride_stops/list?${params.toString()}`,
+      { timeoutMs: 9000, retries: 1 }
+    );
 
-    const data = await response.json();
+    const arrivals = (Array.isArray(data) ? data : [])
+      .map((rideStop) => ({
+        routeNumber: rideStop.gtfs_route__route_short_name || '',
+        routeName: rideStop.gtfs_route__route_long_name || '',
+        agency: rideStop.gtfs_route__agency_name || '',
+        arrivalTime: rideStop.arrival_time,
+        departureTime: rideStop.departure_time || rideStop.arrival_time,
+      }))
+      .filter((a) => a.arrivalTime)
+      .sort((a, b) => new Date(a.arrivalTime) - new Date(b.arrivalTime));
 
-    const arrivals = data.map((rideStop) => ({
-      routeNumber: rideStop.gtfs_route__route_short_name || rideStop.gtfs_route_short_name || '',
-      routeName: rideStop.gtfs_route__route_long_name || rideStop.gtfs_route_long_name || '',
-      agency: rideStop.gtfs_agency__agency_name || rideStop.gtfs_agency_agency_name || '',
-      arrivalTime: rideStop.arrival_time,
-      departureTime: rideStop.departure_time || rideStop.arrival_time,
-    }));
+    setCacheValue(arrivalsCache, stopCodeStr, arrivals);
 
     res.status(200).json({
       success: true,
       arrivals,
     });
   } catch (error) {
-    console.error('Error fetching stop arrivals:', error);
-    next(new AppError('Failed to fetch stop arrivals', 500));
+    const errorCode = error?.cause?.code || error?.code || 'UNKNOWN';
+    console.warn(`Upstream arrivals unavailable for stop ${req.params.stopCode} (${errorCode}), using fallback.`);
+    const cachedArrivals = getFreshCacheValue(arrivalsCache, String(req.params.stopCode), ARRIVALS_CACHE_TTL_MS);
+    if (cachedArrivals) {
+      return res.status(200).json({
+        success: true,
+        arrivals: cachedArrivals,
+        source: 'cache-fallback',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      arrivals: [],
+      source: 'unavailable',
+    });
   }
 };
 
 export const getLiveVehiclesForStop = async (req, res, next) => {
   try {
     const { stopCode } = req.params;
+    const stopCodeStr = String(stopCode);
+    const routeFilter = String(req.query.route || '').trim();
+    const cacheKey = `${stopCodeStr}::${routeFilter || 'all'}`;
     const now = new Date();
-    const future = new Date(now.getTime() + 60 * 60 * 1000);
+    const fromScheduledTime = new Date(now.getTime() - 4 * 60 * 60 * 1000).toISOString();
+    const toScheduledTime = new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString();
+    const fromRecordedAt = new Date(now.getTime() - 3 * 60 * 1000).toISOString();
+    const toRecordedAt = new Date(now.getTime() + 60 * 1000).toISOString();
 
-    const fromStr = now.toISOString().replace('Z', '+00:00');
-    const toStr = future.toISOString().replace('Z', '+00:00');
-
-    const ridesParams = new URLSearchParams({
-      arrival_time_from: fromStr,
-      arrival_time_to: toStr,
-      gtfs_stop__code: stopCode,
-      limit: 50,
+    const siriStopsParams = new URLSearchParams({
+      codes: stopCodeStr,
+      limit: '30',
     });
 
-    const ridesRes = await fetch(`${STRIDE_API}/siri_ride_stops/list?${ridesParams.toString()}`);
-    if (!ridesRes.ok) return next(new AppError('Failed to fetch active rides', 502));
-    const ridesData = await ridesRes.json();
+    const siriStopsData = await fetchJsonWithRetry(
+      `${STRIDE_API}/siri_stops/list?${siriStopsParams.toString()}`,
+      { timeoutMs: 9000, retries: 1 }
+    );
 
-    const rideIds = ridesData.map((r) => r.siri_ride__id).filter(Boolean);
-    if (rideIds.length === 0) {
-      return res.status(200).json({ success: true, vehicles: [] });
+    const siriStopIds = (Array.isArray(siriStopsData) ? siriStopsData : [])
+      .map((row) => row.id)
+      .filter((id) => Number.isFinite(id));
+
+    if (siriStopIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        vehicles: [],
+        routeFilter: routeFilter || null,
+        freshnessSeconds: Math.floor(LIVE_MAX_AGE_MS / 1000),
+      });
     }
 
-    const locParams = new URLSearchParams({
-      siri_ride__id__in: rideIds.join(','),
-      limit: 200,
-      order_by: 'recorded_at_time desc',
+    const rideStopsParams = new URLSearchParams({
+      siri_stop_ids: siriStopIds.join(','),
+      siri_ride__scheduled_start_time_from: fromScheduledTime,
+      siri_ride__scheduled_start_time_to: toScheduledTime,
+      limit: '5000',
     });
 
-    const locRes = await fetch(`${STRIDE_API}/siri_vehicle_locations/list?${locParams.toString()}`);
-    if (!locRes.ok) return next(new AppError('Failed to fetch vehicle locations', 502));
-    const locData = await locRes.json();
+    const rideStopsData = await fetchJsonWithRetry(
+      `${STRIDE_API}/siri_ride_stops/list?${rideStopsParams.toString()}`,
+      { timeoutMs: 9000, retries: 1 }
+    );
+
+    const ridesMap = new Map();
+    (Array.isArray(rideStopsData) ? rideStopsData : [])
+      .filter((row) => String(row.siri_stop__code || row.gtfs_stop__code || '') === stopCodeStr)
+      .forEach((row) => {
+        const rideId = row.siri_ride_id || row.siri_ride__id;
+        if (!Number.isFinite(rideId)) return;
+        const rideKey = String(rideId);
+
+        const routeNumber = String(row.gtfs_route__route_short_name || '').trim();
+        if (routeFilter && routeNumber !== routeFilter) return;
+
+        if (!ridesMap.has(rideKey)) {
+          ridesMap.set(rideKey, {
+            routeNumber,
+            routeName: row.gtfs_route__route_long_name || '',
+            lineRef: row.gtfs_route__line_ref ?? null,
+            vehicleRef: row.siri_ride__vehicle_ref ?? null,
+          });
+        }
+      });
+
+    const rideIds = Array.from(ridesMap.keys());
+    if (rideIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        vehicles: [],
+        routeFilter: routeFilter || null,
+        freshnessSeconds: Math.floor(LIVE_MAX_AGE_MS / 1000),
+      });
+    }
+
+    const chunkSize = 120;
+    const liveRows = [];
+    for (let i = 0; i < rideIds.length; i += chunkSize) {
+      const chunk = rideIds.slice(i, i + chunkSize);
+      const liveParams = new URLSearchParams({
+        siri_rides__ids: chunk.join(','),
+        recorded_at_time_from: fromRecordedAt,
+        recorded_at_time_to: toRecordedAt,
+        limit: '5000',
+        order_by: 'recorded_at_time desc',
+      });
+
+      const chunkData = await fetchJsonWithRetry(
+        `${STRIDE_API}/siri_vehicle_locations/list?${liveParams.toString()}`,
+        { timeoutMs: 9000, retries: 1 }
+      );
+
+      if (Array.isArray(chunkData)) {
+        liveRows.push(...chunkData);
+      }
+    }
 
     const latestLocations = new Map();
-    locData.forEach((loc) => {
-      if (!latestLocations.has(loc.siri_ride__id)) {
-        latestLocations.set(loc.siri_ride__id, loc);
-      }
-    });
+    liveRows
+      .forEach((row) => {
+        const recordedAt = row.recorded_at_time;
+        if (!recordedAt) return;
 
-    const vehicles = Array.from(latestLocations.values()).map((loc) => ({
-      rideId: loc.siri_ride__id,
-      lat: loc.lat,
-      lon: loc.lon,
-      recordedAt: loc.recorded_at_time,
-      velocity: loc.velocity,
-    }));
+        const ageMs = now.getTime() - new Date(recordedAt).getTime();
+        if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > LIVE_MAX_AGE_MS) return;
+
+        const lat = row.lat;
+        const lon = row.lon;
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+        const rideId = row.siri_ride__id || row.siri_ride_id || row.id;
+        const rideKey = String(rideId || '');
+        const rideMeta = ridesMap.get(rideKey);
+        if (!rideMeta) return;
+
+        const vehicleRef = row.siri_ride__vehicle_ref ?? null;
+        const dedupeKey = String(vehicleRef || rideId || row.id);
+        if (!dedupeKey) return;
+
+        const candidate = {
+          rideId,
+          lat,
+          lon,
+          recordedAt,
+          velocity: row.velocity ?? null,
+          lineRef: rideMeta.lineRef ?? row.siri_route__line_ref ?? null,
+          routeNumber: rideMeta.routeNumber || '',
+          routeName: rideMeta.routeName || '',
+          vehicleRef,
+          distanceFromStopMeters: null,
+        };
+
+        const current = latestLocations.get(dedupeKey);
+        if (!current || new Date(recordedAt) > new Date(current.recordedAt)) {
+          latestLocations.set(dedupeKey, candidate);
+        }
+      });
+
+    const vehicles = Array.from(latestLocations.values()).sort(
+      (a, b) => new Date(b.recordedAt) - new Date(a.recordedAt)
+    );
+
+    setCacheValue(liveVehiclesCache, cacheKey, vehicles);
 
     res.status(200).json({
       success: true,
       vehicles,
+      routeFilter: routeFilter || null,
+      freshnessSeconds: Math.floor(LIVE_MAX_AGE_MS / 1000),
     });
   } catch (error) {
-    console.error('Error fetching live vehicles:', error);
-    next(new AppError('Failed to fetch live vehicles', 500));
+    const errorCode = error?.cause?.code || error?.code || 'UNKNOWN';
+    console.warn(`Upstream live unavailable for stop ${req.params.stopCode} (${errorCode}), using fallback.`);
+    const stopCodeStr = String(req.params.stopCode);
+    const routeFilter = String(req.query.route || '').trim();
+    const cacheKey = `${stopCodeStr}::${routeFilter || 'all'}`;
+    const cachedVehicles = getFreshCacheValue(liveVehiclesCache, cacheKey, LIVE_CACHE_TTL_MS);
+    if (cachedVehicles) {
+      return res.status(200).json({
+        success: true,
+        vehicles: cachedVehicles,
+        source: 'cache-fallback',
+        routeFilter: routeFilter || null,
+        freshnessSeconds: Math.floor(LIVE_MAX_AGE_MS / 1000),
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      vehicles: [],
+      source: 'unavailable',
+      routeFilter: routeFilter || null,
+      freshnessSeconds: Math.floor(LIVE_MAX_AGE_MS / 1000),
+    });
   }
 };

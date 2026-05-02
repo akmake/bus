@@ -22,6 +22,8 @@ export const busApi = {
   getArrivals: (stopCode) =>
     busHttp.get(`/buses/arrivals/${stopCode}`),
 
-  getLiveVehicles: (stopCode) =>
-    busHttp.get(`/buses/live/${stopCode}`),
+  getLiveVehicles: (stopCode, routeNumber) =>
+    busHttp.get(`/buses/live/${stopCode}`, {
+      params: routeNumber ? { route: routeNumber } : undefined,
+    }),
 };
