@@ -43,42 +43,36 @@ export const register = async (req, res, next) => {
   }
 };
 
-// --- פונקציית ההתחברות עם הדיבאג ---
+// --- פונקציית ההתחברות ---
 export const login = async (req, res, next) => {
-  const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-  // הדפסה לטרמינל כדי שנראה מה מגיע מהאתר
-  console.log('\n--- Login Attempt ---');
-  console.log('Email received:', email);
-  console.log('Password received:', password);
+    // 1. בדיקת קלט
+    if (!email || !password) {
+      return next(new AppError('Please provide email and password', 400));
+    }
 
-  // 1. בדיקת קלט
-  if (!email || !password) {
-    console.log('❌ Missing email or password');
-    return next(new AppError('Please provide email and password', 400));
+    // 2. חיפוש המשתמש
+    const user = await User.findOne({ email }).select('+password');
+
+    if (!user) {
+      // אותה הודעה כדי לא לחשוף האם המייל קיים במערכת (timing/enumeration attacks)
+      return next(new AppError('Incorrect email or password', 401));
+    }
+
+    // 3. בדיקת סיסמה
+    const isMatch = await user.correctPassword(password, user.password);
+
+    if (!isMatch) {
+      return next(new AppError('Incorrect email or password', 401));
+    }
+
+    // 4. הצלחה
+    createSendToken(user, 200, res);
+  } catch (err) {
+    next(err);
   }
-
-  // 2. חיפוש המשתמש
-  const user = await User.findOne({ email }).select('+password');
-  
-  if (!user) {
-    console.log('❌ User not found in DB');
-    return next(new AppError('Incorrect email or password', 401));
-  }
-
-  console.log('User found in DB:', user.email);
-  console.log('User Role:', user.role);
-
-  // 3. בדיקת סיסמה
-  const isMatch = await user.correctPassword(password, user.password);
-  
-  if (!isMatch) {
-    console.log('❌ Password Incorrect');
-    return next(new AppError('Incorrect email or password', 401));
-  }
-
-  // 4. הצלחה
-  createSendToken(user, 200, res);
 };
 
 export const logout = (req, res) => {
